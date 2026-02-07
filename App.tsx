@@ -176,15 +176,15 @@ const CandlestickChart: React.FC<{ data: any[], symbol: string, interval: string
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
-    // Use a safety check for bounding rect to avoid -1 errors
     const rect = chartContainerRef.current.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return;
+    const width = rect.width > 0 ? rect.width : 600;
+    const height = rect.height > 0 ? rect.height : 350;
 
     const chart = createChart(chartContainerRef.current, {
       layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: '#9ca3af', fontSize: 10 },
       grid: { vertLines: { color: 'rgba(255, 255, 255, 0.02)' }, horzLines: { color: 'rgba(255, 255, 255, 0.02)' } },
-      width: rect.width,
-      height: rect.height,
+      width,
+      height,
       timeScale: { borderColor: 'rgba(255, 255, 255, 0.05)', timeVisible: true },
     });
 
@@ -316,7 +316,7 @@ export default function GhostTradingCoach() {
     if (proceed && intervention?.pendingTrade) {
       executeTrade(intervention.pendingTrade.type, intervention.pendingTrade.intentPrice, intervention.pendingTrade.intentTimestamp, intervention.pendingTrade.reasoning, true, intervention.pendingTrade.size);
     } else if (!proceed && intervention) {
-      const updatedProfile = { ...profile, capitalPreserved: profile.capitalPreserved + intervention.riskAmount };
+      const updatedProfile = { ...profile, capitalPreserved: profile.capitalPreserved + (intervention.riskAmount || 0) };
       setProfile(updatedProfile);
       await dbService.saveProfile(updatedProfile);
     }
