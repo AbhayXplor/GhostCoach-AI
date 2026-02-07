@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   ResponsiveContainer, AreaChart, Area, CartesianGrid, XAxis, YAxis, Tooltip as RechartsTooltip, BarChart, Bar, Cell
@@ -178,32 +177,37 @@ const CandlestickChart: React.FC<{ data: any[], symbol: string, interval: string
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
-    // Safety check: ensure container has non-zero dimensions
-    const width = chartContainerRef.current.clientWidth || 600;
-    const height = chartContainerRef.current.clientHeight || 450;
+    // Use specific layout calculation to avoid dimension errors
+    const rect = chartContainerRef.current.getBoundingClientRect();
+    const width = rect.width || 600;
+    const height = rect.height || 400;
 
-    chartRef.current = createChart(chartContainerRef.current, {
+    const chart = createChart(chartContainerRef.current, {
       layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: '#9ca3af', fontSize: 10 },
       grid: { vertLines: { color: 'rgba(255, 255, 255, 0.02)' }, horzLines: { color: 'rgba(255, 255, 255, 0.02)' } },
-      crosshair: { mode: CrosshairMode.Normal, vertLine: { labelBackgroundColor: '#10b981', style: 2 }, horzLine: { labelBackgroundColor: '#10b981', style: 2 } },
-      width, height,
-      timeScale: { borderColor: 'rgba(255, 255, 255, 0.05)', timeVisible: true, secondsVisible: false },
-      rightPriceScale: { borderColor: 'rgba(255, 255, 255, 0.05)', scaleMargins: { top: 0.1, bottom: 0.2 } },
+      crosshair: { mode: CrosshairMode.Normal },
+      width,
+      height,
+      timeScale: { borderColor: 'rgba(255, 255, 255, 0.05)', timeVisible: true },
     });
 
-    seriesRef.current = chartRef.current.addCandlestickSeries({ 
+    const candlestickSeries = chart.addCandlestickSeries({ 
       upColor: '#10b981', downColor: '#ef4444', borderVisible: false, wickUpColor: '#10b981', wickDownColor: '#ef4444' 
     });
     
-    smaRef.current = chartRef.current.addLineSeries({ 
-      color: 'rgba(59, 130, 246, 0.3)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false 
+    const lineSeries = chart.addLineSeries({ 
+      color: 'rgba(59, 130, 246, 0.3)', lineWidth: 1, priceLineVisible: false 
     });
+
+    chartRef.current = chart;
+    seriesRef.current = candlestickSeries;
+    smaRef.current = lineSeries;
 
     const resizeObserver = new ResizeObserver(entries => {
       if (entries.length === 0 || !chartRef.current) return;
       const { width, height } = entries[0].contentRect;
       if (width > 0 && height > 0) {
-        chartRef.current.applyOptions({ width, height });
+        chartRef.current.resize(width, height);
       }
     });
 
@@ -214,6 +218,8 @@ const CandlestickChart: React.FC<{ data: any[], symbol: string, interval: string
       if (chartRef.current) {
         chartRef.current.remove();
         chartRef.current = null;
+        seriesRef.current = null;
+        smaRef.current = null;
       }
     };
   }, []);
@@ -232,7 +238,6 @@ const CandlestickChart: React.FC<{ data: any[], symbol: string, interval: string
         smaRef.current.setData(smaData as any);
       }
       
-      // Only fit content if chart is fully initialized and visible
       requestAnimationFrame(() => {
         chartRef.current?.timeScale().fitContent();
       });
@@ -258,14 +263,12 @@ export default function GhostTradingCoach() {
   const [marketPrice, setMarketPrice] = useState(0);
   const [candleData, setCandleData] = useState<any[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [isWsConnected, setIsWsConnected] = useState(false);
   const [intervention, setIntervention] = useState<{ show: boolean, reason: string, riskAmount: number, evidenceTrades?: InterventionEvidence[], pendingTrade?: any } | null>(null);
   const [openTrade, setOpenTrade] = useState<Trade | null>(null);
   const [tradeReasoning, setTradeReasoning] = useState('');
   const [playbook, setPlaybook] = useState<Playbook | null>(null);
   const [mirrorResult, setMirrorResult] = useState<string | null>(null);
 
-  // Initial Fetch from Neon (Local Storage Sync)
   useEffect(() => {
     const init = async () => {
       const savedTrades = await dbService.getTrades();
@@ -278,7 +281,6 @@ export default function GhostTradingCoach() {
     init();
   }, [activeTab]);
 
-  // Price Stream
   useEffect(() => {
     let ws: WebSocket;
     if (view !== 'app') return;
@@ -294,7 +296,6 @@ export default function GhostTradingCoach() {
     };
     fetchHistory();
     ws = new WebSocket(`wss://stream.binance.com:9443/ws/btcusdt@kline_${timeframe}`);
-    ws.onopen = () => setIsWsConnected(true);
     ws.onmessage = (event) => {
         const k = JSON.parse(event.data).k;
         const price = parseFloat(k.c);
@@ -400,7 +401,6 @@ export default function GhostTradingCoach() {
       : (openTrade.entryPrice - marketPrice) * openTrade.size;
   };
 
-  // Helper for Dashboard Charts
   const chartData = trades.slice().reverse().map((t, idx) => ({
     name: idx,
     pnl: trades.slice(0, idx + 1).reduce((acc, curr) => acc + (curr.pnl || 0), 0)
@@ -611,6 +611,7 @@ export default function GhostTradingCoach() {
                    {playbook.modules.map((m, i) => (
                      <div key={i} className="glass p-8 rounded-[2rem] border-white/5 hover:border-emerald-500/20 transition-all">
                        <div className="flex justify-between items-start mb-6"><div className="px-4 py-1.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-black uppercase border border-emerald-500/10">{m.type}</div></div>
+                       <h3 className="text-2xl font-black mb-4 uppercase tracking-tighter">{m.title}</h3>
                        <h3 className="text-2xl font-black mb-4 uppercase tracking-tighter">{m.title}</h3>
                        <p className="text-slate-400 text-sm leading-relaxed">{m.content}</p>
                      </div>
