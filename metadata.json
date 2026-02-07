@@ -1,0 +1,5 @@
+{
+  "name": "Ghost Trading Coach",
+  "description": "An AI behavioral intervention system for traders that analyzes real-time actions against historical mistakes to prevent impulsive trading decisions.",
+  "requestFramePermissions": []
+}
