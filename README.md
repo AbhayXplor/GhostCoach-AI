@@ -1,20 +1,30 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# GHOST: AI Behavioral Trading Coach
 
-# Run and deploy your AI Studio app
+GHOST is a high-fidelity trading terminal designed to solve the #1 cause of trader failure: **Psychological Bias**. Using Gemini 3 Pro and Neon for persistent pattern memory, Ghost acts as a "Behavioral Firewall" that intercepts impulsive trades before they hit the exchange.
 
-This contains everything you need to run your app locally.
+## 🚀 Features
 
-View your app in AI Studio: https://ai.studio/apps/drive/1MDqaUCg_lcb1eJFiGh6RGJh4kwxAgLBK
+- **Behavioral Firewall**: Real-time trade intent analysis that triggers a 10-second intervention if FOMO or Revenge trading patterns are detected.
+- **Neural Persistence**: Every trade reasoning and outcome is synced to a persistent archive, building a unique "Psychological DNA" profile.
+- **Post-Trade Mirror**: An AI-generated feedback loop that reconciles your trade reasoning with actual market outcomes.
+- **Brain Archive**: A personalized trading course synthesized from your own historical data and mistakes.
 
-## Run Locally
+## 🛠️ Tech Stack
 
-**Prerequisites:**  Node.js
+- **Core**: React 19, TypeScript
+- **Intelligence**: Google Gemini API (2.5 & 3 series)
+- **Analytics**: Recharts, Lightweight Charts (TradingView Engine)
+- **Styling**: Tailwind CSS, Framer Motion
+- **Persistence**: Neon (Conceptual high-fidelity sync)
 
+## 📦 Deployment on Vercel
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+1. Push this repository to GitHub.
+2. Import the project into Vercel.
+3. Add the following Environment Variable in the Vercel Dashboard:
+   - `API_KEY`: Your Gemini API Key from Google AI Studio.
+4. Deploy.
+
+---
+
+*This project was built for the Deriv AI Hackathon. Stop trading blind. Start trading with a Ghost.*

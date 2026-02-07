@@ -177,19 +177,45 @@ const CandlestickChart: React.FC<{ data: any[], symbol: string, interval: string
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
+
+    // Safety check: ensure container has non-zero dimensions
+    const width = chartContainerRef.current.clientWidth || 600;
+    const height = chartContainerRef.current.clientHeight || 450;
+
     chartRef.current = createChart(chartContainerRef.current, {
       layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: '#9ca3af', fontSize: 10 },
       grid: { vertLines: { color: 'rgba(255, 255, 255, 0.02)' }, horzLines: { color: 'rgba(255, 255, 255, 0.02)' } },
       crosshair: { mode: CrosshairMode.Normal, vertLine: { labelBackgroundColor: '#10b981', style: 2 }, horzLine: { labelBackgroundColor: '#10b981', style: 2 } },
-      width: chartContainerRef.current.clientWidth, height: 450,
+      width, height,
       timeScale: { borderColor: 'rgba(255, 255, 255, 0.05)', timeVisible: true, secondsVisible: false },
       rightPriceScale: { borderColor: 'rgba(255, 255, 255, 0.05)', scaleMargins: { top: 0.1, bottom: 0.2 } },
     });
-    seriesRef.current = chartRef.current.addCandlestickSeries({ upColor: '#10b981', downColor: '#ef4444', borderVisible: false, wickUpColor: '#10b981', wickDownColor: '#ef4444' });
-    smaRef.current = chartRef.current.addLineSeries({ color: 'rgba(59, 130, 246, 0.3)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
-    const handleResize = () => chartRef.current?.applyOptions({ width: chartContainerRef.current?.clientWidth || 0 });
-    window.addEventListener('resize', handleResize);
-    return () => { window.removeEventListener('resize', handleResize); if (chartRef.current) chartRef.current.remove(); };
+
+    seriesRef.current = chartRef.current.addCandlestickSeries({ 
+      upColor: '#10b981', downColor: '#ef4444', borderVisible: false, wickUpColor: '#10b981', wickDownColor: '#ef4444' 
+    });
+    
+    smaRef.current = chartRef.current.addLineSeries({ 
+      color: 'rgba(59, 130, 246, 0.3)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false 
+    });
+
+    const resizeObserver = new ResizeObserver(entries => {
+      if (entries.length === 0 || !chartRef.current) return;
+      const { width, height } = entries[0].contentRect;
+      if (width > 0 && height > 0) {
+        chartRef.current.applyOptions({ width, height });
+      }
+    });
+
+    resizeObserver.observe(chartContainerRef.current);
+
+    return () => {
+      resizeObserver.disconnect();
+      if (chartRef.current) {
+        chartRef.current.remove();
+        chartRef.current = null;
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -201,12 +227,19 @@ const CandlestickChart: React.FC<{ data: any[], symbol: string, interval: string
           const avg = subset.reduce((acc, curr) => acc + curr.close, 0) / 20;
           return { time: d.time, value: avg };
       }).filter(d => d !== null);
-      if (smaRef.current) smaRef.current.setData(smaData as any);
-      chartRef.current?.timeScale().fitContent();
+      
+      if (smaRef.current) {
+        smaRef.current.setData(smaData as any);
+      }
+      
+      // Only fit content if chart is fully initialized and visible
+      requestAnimationFrame(() => {
+        chartRef.current?.timeScale().fitContent();
+      });
     }
   }, [data]);
 
-  return <div ref={chartContainerRef} className="w-full h-full" />;
+  return <div ref={chartContainerRef} className="w-full h-full min-h-[400px]" />;
 };
 
 // --- Main App ---
@@ -250,10 +283,14 @@ export default function GhostTradingCoach() {
     let ws: WebSocket;
     if (view !== 'app') return;
     const fetchHistory = async () => {
+      try {
         const resp = await fetch(`https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=${timeframe}&limit=100`);
         const history = await resp.json();
         const formatted = history.map((k: any) => ({ time: k[0] / 1000, open: parseFloat(k[1]), high: parseFloat(k[2]), low: parseFloat(k[3]), close: parseFloat(k[4]) }));
         setCandleData(formatted);
+      } catch (err) {
+        console.error("Failed to fetch historical candle data", err);
+      }
     };
     fetchHistory();
     ws = new WebSocket(`wss://stream.binance.com:9443/ws/btcusdt@kline_${timeframe}`);
@@ -371,8 +408,8 @@ export default function GhostTradingCoach() {
 
   const biasData = [
     { name: 'FOMO', value: profile.fomoScore, color: '#ef4444' },
-    { name: 'Revenge', value: profile.revengeTradeLikelihood * 100, color: '#f59e0b' },
-    { name: 'Streak', value: profile.streakCount * 10, color: '#10b981' }
+    { name: 'Revenge', value: (profile.revengeTradeLikelihood || 0) * 100, color: '#f59e0b' },
+    { name: 'Streak', value: (profile.streakCount || 0) * 10, color: '#10b981' }
   ];
 
   if (view === 'landing') return <LandingPage onLaunch={() => setView('app')} />;
@@ -526,7 +563,7 @@ export default function GhostTradingCoach() {
                    </div>
                    <div className="mt-8 p-6 bg-white/5 rounded-3xl text-center">
                       <div className="text-[10px] font-black uppercase text-slate-500 mb-2">Overall Resilience</div>
-                      <div className="text-2xl font-black text-white">{Math.max(0, 100 - profile.fomoScore).toFixed(0)}%</div>
+                      <div className="text-2xl font-black text-white">{Math.max(0, 100 - (profile.fomoScore || 0)).toFixed(0)}%</div>
                    </div>
                 </div>
               </div>
