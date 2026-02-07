@@ -172,42 +172,34 @@ const CandlestickChart: React.FC<{ data: any[], symbol: string, interval: string
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
-  const smaRef = useRef<ISeriesApi<'Line'> | null>(null);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
-    // Use specific layout calculation to avoid dimension errors
+    // Use a safety check for bounding rect to avoid -1 errors
     const rect = chartContainerRef.current.getBoundingClientRect();
-    const width = rect.width || 600;
-    const height = rect.height || 400;
+    if (rect.width <= 0 || rect.height <= 0) return;
 
     const chart = createChart(chartContainerRef.current, {
       layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: '#9ca3af', fontSize: 10 },
       grid: { vertLines: { color: 'rgba(255, 255, 255, 0.02)' }, horzLines: { color: 'rgba(255, 255, 255, 0.02)' } },
-      crosshair: { mode: CrosshairMode.Normal },
-      width,
-      height,
+      width: rect.width,
+      height: rect.height,
       timeScale: { borderColor: 'rgba(255, 255, 255, 0.05)', timeVisible: true },
     });
 
-    const candlestickSeries = chart.addCandlestickSeries({ 
+    const series = chart.addCandlestickSeries({ 
       upColor: '#10b981', downColor: '#ef4444', borderVisible: false, wickUpColor: '#10b981', wickDownColor: '#ef4444' 
-    });
-    
-    const lineSeries = chart.addLineSeries({ 
-      color: 'rgba(59, 130, 246, 0.3)', lineWidth: 1, priceLineVisible: false 
     });
 
     chartRef.current = chart;
-    seriesRef.current = candlestickSeries;
-    smaRef.current = lineSeries;
+    seriesRef.current = series;
 
     const resizeObserver = new ResizeObserver(entries => {
       if (entries.length === 0 || !chartRef.current) return;
       const { width, height } = entries[0].contentRect;
       if (width > 0 && height > 0) {
-        chartRef.current.resize(width, height);
+        chartRef.current.applyOptions({ width, height });
       }
     });
 
@@ -218,8 +210,6 @@ const CandlestickChart: React.FC<{ data: any[], symbol: string, interval: string
       if (chartRef.current) {
         chartRef.current.remove();
         chartRef.current = null;
-        seriesRef.current = null;
-        smaRef.current = null;
       }
     };
   }, []);
@@ -227,24 +217,13 @@ const CandlestickChart: React.FC<{ data: any[], symbol: string, interval: string
   useEffect(() => {
     if (seriesRef.current && data.length > 0) {
       seriesRef.current.setData(data);
-      const smaData = data.map((d, i) => {
-          if (i < 20) return null;
-          const subset = data.slice(i - 19, i + 1);
-          const avg = subset.reduce((acc, curr) => acc + curr.close, 0) / 20;
-          return { time: d.time, value: avg };
-      }).filter(d => d !== null);
-      
-      if (smaRef.current) {
-        smaRef.current.setData(smaData as any);
-      }
-      
       requestAnimationFrame(() => {
         chartRef.current?.timeScale().fitContent();
       });
     }
   }, [data]);
 
-  return <div ref={chartContainerRef} className="w-full h-full min-h-[400px]" />;
+  return <div ref={chartContainerRef} className="w-full h-full min-h-[350px]" />;
 };
 
 // --- Main App ---
@@ -274,7 +253,7 @@ export default function GhostTradingCoach() {
       const savedTrades = await dbService.getTrades();
       const savedProfile = await dbService.getProfile();
       const savedPlaybook = await dbService.getPlaybook();
-      setTrades(savedTrades);
+      setTrades(savedTrades || []);
       setPlaybook(savedPlaybook);
       if (savedProfile) setProfile(savedProfile);
     };
@@ -297,7 +276,9 @@ export default function GhostTradingCoach() {
     fetchHistory();
     ws = new WebSocket(`wss://stream.binance.com:9443/ws/btcusdt@kline_${timeframe}`);
     ws.onmessage = (event) => {
-        const k = JSON.parse(event.data).k;
+        const data = JSON.parse(event.data);
+        if (!data || !data.k) return;
+        const k = data.k;
         const price = parseFloat(k.c);
         setMarketPrice(price);
         if (k.x) {
@@ -320,7 +301,7 @@ export default function GhostTradingCoach() {
       profile
     );
     setIsAnalyzing(false);
-    if (result.interventionRequired) {
+    if (result && result.interventionRequired) {
       setIntervention({ 
         show: true, reason: result.reason, riskAmount: result.estimatedRiskAmount, 
         evidenceTrades: result.evidenceTrades,
@@ -611,7 +592,6 @@ export default function GhostTradingCoach() {
                    {playbook.modules.map((m, i) => (
                      <div key={i} className="glass p-8 rounded-[2rem] border-white/5 hover:border-emerald-500/20 transition-all">
                        <div className="flex justify-between items-start mb-6"><div className="px-4 py-1.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-black uppercase border border-emerald-500/10">{m.type}</div></div>
-                       <h3 className="text-2xl font-black mb-4 uppercase tracking-tighter">{m.title}</h3>
                        <h3 className="text-2xl font-black mb-4 uppercase tracking-tighter">{m.title}</h3>
                        <p className="text-slate-400 text-sm leading-relaxed">{m.content}</p>
                      </div>

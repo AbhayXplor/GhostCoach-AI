@@ -1,9 +1,5 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { Trade, PsychologicalProfile, Lesson, Playbook } from "../types";
-
-// Always use process.env.API_KEY directly in the constructor.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export interface InterventionEvidence {
   tradeId: string;
@@ -11,6 +7,9 @@ export interface InterventionEvidence {
   date: string;
   reason: string;
 }
+
+// Function to get a fresh instance of AI with the latest API key
+const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const geminiService = {
   async analyzeTradeIntent(
@@ -25,6 +24,7 @@ export const geminiService = {
     evidenceTrades?: InterventionEvidence[],
     estimatedRiskAmount: number 
   }> {
+    const ai = getAI();
     const losingTrades = tradeHistory.filter(t => (t.pnl || 0) < 0).slice(0, 5);
     
     const prompt = `
@@ -45,9 +45,6 @@ export const geminiService = {
       TASK:
       Perform deep reasoning. Check if this trade matches a recurring losing pattern (e.g. FOMO, Revenge, Ignoring Trend).
       If the user's reasoning is weak or contradicts the candles, intervention is REQUIRED.
-      
-      In your response, if interventionRequired is true, pick 1-2 SPECIFIC trade IDs from the history that match this bad behavior.
-      Calculate estimatedRiskAmount based on the provided trade size and volatility.
       
       Respond in JSON.
     `;
@@ -86,29 +83,13 @@ export const geminiService = {
       return JSON.parse(response.text || '{}');
     } catch (e) {
       console.error("Gemini Analysis Failed", e);
-      return { interventionRequired: false, reason: "", estimatedRiskAmount: 0 };
+      return { interventionRequired: false, reason: "Analysis Error", estimatedRiskAmount: 0 };
     }
   },
 
   async generatePostTradeMirror(trade: Trade, marketContext: any[]): Promise<string> {
-    const slippageInfo = trade.executionSlippage && trade.executionSlippage !== 0 
-      ? `NOTE: The system caused a slippage of $${trade.executionSlippage.toFixed(2)} between the user's intent and actual entry.`
-      : "";
-
-    const prompt = `
-      Perform a "Brutal Mirror" analysis on this completed trade.
-      Trade Type: ${trade.type}
-      Size: ${trade.size}
-      User intent price: $${trade.intentPrice.toFixed(2)}
-      Actual entry price: $${trade.entryPrice.toFixed(2)}
-      User reasoning was: "${trade.reasoning}"
-      Outcome: ${trade.pnl && trade.pnl > 0 ? 'WIN' : 'LOSS'} ($${trade.pnl?.toFixed(2)})
-      ${slippageInfo}
-      
-      Task: Explain the gap between the user's expectation and what actually happened. 
-      IMPORTANT: If the user's idea was correct at their intent price, but the system's analysis delay or intervention caused them to enter at a worse price leading to a loss, ACKNOWLEDGE that this was an "Execution Cost" and defend the user's logic while explaining why the intervention (if any) was still psychologically valuable.
-      Limit to 2-3 piercing sentences.
-    `;
+    const ai = getAI();
+    const prompt = `Perform a brutal mirror analysis on this trade: ${JSON.stringify(trade)}. Explain the gap between intent and outcome in 2 sentences.`;
     
     try {
       const response = await ai.models.generateContent({
@@ -122,21 +103,8 @@ export const geminiService = {
   },
 
   async generateFullPlaybook(tradeHistory: Trade[], profile: PsychologicalProfile): Promise<Playbook> {
-    const prompt = `
-      As GHOST, analyze this trader's complete history: ${JSON.stringify(tradeHistory)}.
-      Profile Context: ${JSON.stringify(profile)}.
-      
-      TASK: Synthesize a "Personalized Master Strategy Course". 
-      Focus on their specific strategies, behavioral biases (FOMO score: ${profile.fomoScore}), and recurring technical errors.
-      
-      Structure the response as a Playbook object with exactly 4 modules:
-      1. PRINCIPLE: A foundational rule they MUST follow.
-      2. MISTAKE: A deep analysis of their most frequent error.
-      3. PATTERN: A behavioral pattern recognition guide.
-      4. PROTOCOL: A step-by-step execution protocol for their edge.
-
-      Respond in JSON.
-    `;
+    const ai = getAI();
+    const prompt = `Synthesize a personalized trading playbook for a user with these trades: ${JSON.stringify(tradeHistory)}. Respond in JSON with modules: principle, mistake, pattern, protocol.`;
 
     try {
       const response = await ai.models.generateContent({
@@ -156,8 +124,7 @@ export const geminiService = {
                   properties: {
                     title: { type: Type.STRING },
                     content: { type: Type.STRING },
-                    type: { type: Type.STRING, enum: ['principle', 'mistake', 'pattern', 'protocol'] },
-                    visualAidType: { type: Type.STRING, enum: ['bar', 'list', 'warning'] }
+                    type: { type: Type.STRING, enum: ['principle', 'mistake', 'pattern', 'protocol'] }
                   },
                   required: ['title', 'content', 'type']
                 }
@@ -181,38 +148,16 @@ export const geminiService = {
   },
 
   async generatePersonalizedLessons(tradeHistory: Trade[]): Promise<Lesson[]> {
+    const ai = getAI();
     if (tradeHistory.length === 0) return [];
-    const prompt = `
-      Analyze this specific trader's history: ${JSON.stringify(tradeHistory.slice(-15))}.
-      TASK: Generate a high-quality "Personalized Trading Playbook" entry.
-      Structure: Title, Content (Symptom, Root Cause, Protocol), Category ('Risk', 'Psychology', or 'Technical').
-      Return an array containing one new comprehensive lesson.
-    `;
     try {
       const response = await ai.models.generateContent({
         model: 'gemini-3-pro-preview',
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                id: { type: Type.STRING },
-                title: { type: Type.STRING },
-                content: { type: Type.STRING },
-                category: { type: Type.STRING },
-                relevantTradeIds: { type: Type.ARRAY, items: { type: Type.STRING } }
-              },
-              required: ['id', 'title', 'content', 'category', 'relevantTradeIds']
-            }
-          }
-        }
+        contents: "Generate 1 specific trading lesson based on history.",
+        config: { responseMimeType: 'application/json' }
       });
       return JSON.parse(response.text || '[]');
     } catch (e) {
-      console.error("Lesson generation failed", e);
       return [];
     }
   }
